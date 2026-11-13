@@ -188,7 +188,7 @@ for (let i = 0; i < 230; i++) {
   });
 }
 const SPARKS = [
-  [0.085, 0.3, 0.02],
+  [0.07, 0.4, 0.02],
   [0.9, 0.1, 0.024],
   [0.2, 0.56, 0.015],
   [0.83, 0.47, 0.018],
@@ -207,12 +207,21 @@ for (const [sx, sy, r] of SPARKS) {
   });
 }
 {
-  const mx = 0.135;
-  const my = 0.13;
-  const mr = 0.052;
+  const mx = 0.113;
+  const my = 0.2;
+  const mr = 0.05;
   paint(mx - mr, my - mr, mx + mr, my + mr, (x, y) => {
     setc(STAR, 1.2);
     return Math.hypot(x - mx, y - my) < mr && Math.hypot(x - mx - 0.024, y - my + 0.012) > mr * 0.95 ? 1 : 0;
+  });
+  // the moon is a patch sewn onto the cloth: a ring of stitches around it
+  const sr = mr * 1.32;
+  paint(mx - sr - 0.01, my - sr - 0.01, mx + sr + 0.01, my + sr + 0.01, (x, y) => {
+    const d = Math.hypot(x - mx, y - my);
+    if (Math.abs(d - sr) > 0.0017) return 0;
+    const a = Math.atan2(y - my, x - mx) / (Math.PI * 2) + 0.5;
+    setc(STITCH, 0.85);
+    return (a * 30) % 1 < 0.6 ? 1 : 0;
   });
 }
 
@@ -262,6 +271,15 @@ paint(CXc - WTOP - 0.02, 0, CXc + WTOP + 0.02, YS, (x, y) => {
   if (cloud(x, y, 0.435, 0.292, 0.085, 0.034) || cloud(x, y, 0.64, 0.135, 0.07, 0.03) || cloud(x, y, 0.33, 0.07, 0.06, 0.026)) {
     setc(CLOUD);
   }
+  // the cloth has thickness: it shades the morning just inside its rim
+  // (only worth measuring near the rim: far inside, the exact distance is not needed)
+  const ax = Math.abs(x - CXc);
+  if (y > YS - 0.07 || halfWidth(y) - ax < 0.045) {
+    const occ = mix(0.62, 1, smooth(0, 0.02, edgeDist(ax, y)));
+    col[0] *= occ;
+    col[1] *= occ * occ;
+    col[2] *= occ;
+  }
   return 1;
 });
 // birds leaving the opening for the night side
@@ -282,7 +300,7 @@ for (const [bx, by, bs, tilt] of BIRDS) {
     if (ax > 1) return 0;
     const wing = -0.55 * Math.sin(ax * Math.PI) * (1 - 0.35 * ax) + 0.28 * ax;
     setc(INK);
-    return Math.abs(py - wing) < 0.13 * (1.15 - ax) + 0.03 ? 1 : 0;
+    return Math.abs(py - wing) < 0.17 * (1.15 - ax) + 0.04 ? 1 : 0;
   });
 }
 
@@ -386,9 +404,17 @@ function tooth(bx: number, by: number, nx: number, ny: number, shade: number) {
 const farHill = (x: number) => HORIZON - 0.012 * Math.sin(x * 9 + 0.5) - 0.02 * Math.sin(x * 3.3 + 2) - 0.006 * Math.sin(x * 23);
 const midHill = (x: number) => 0.855 - 0.03 * Math.sin(x * 5.2 + 1.2) - 0.012 * Math.sin(x * 13 + 0.3);
 const nearHill = (x: number) => 0.93 - 0.075 * Math.exp(-Math.pow((x - 0.66) / 0.2, 2)) - 0.03 * Math.exp(-Math.pow((x - 0.2) / 0.16, 2)) + 0.012 * Math.sin(x * 11);
+const CREST = hex(0xf08a4b);
 paint(0, HORIZON - 0.06, 1, 1, (x, y) => {
-  if (y > nearHill(x)) setc(HILL_NEAR);
-  else if (y > midHill(x)) setc(HILL_MID);
+  const dn = y - nearHill(x);
+  if (dn > 0) {
+    setc(HILL_NEAR);
+    // the crest under the opening catches a thin line of morning light
+    const lit = (1 - smooth(0.0, 0.0045, dn)) * Math.exp(-Math.pow((x - 0.56) / 0.2, 2));
+    col[0] = mix(col[0], CREST[0], lit * 0.85);
+    col[1] = mix(col[1], CREST[1], lit * 0.85);
+    col[2] = mix(col[2], CREST[2], lit * 0.85);
+  } else if (y > midHill(x)) setc(HILL_MID);
   else if (y > farHill(x)) setc(HILL_FAR);
   else return 0;
   return 1;
@@ -429,6 +455,29 @@ paint(0, HORIZON - 0.06, 1, 1, (x, y) => {
       return Math.abs(x - tx) < tr * (0.12 + 0.88 * tier) ? 1 : 0;
     });
   }
+}
+
+// a pale cat sits at the foot of the ladder and watches
+{
+  const cx = 0.612;
+  const base = nearHill(cx) + 0.003;
+  const CAT = hex(0xf6e7bd);
+  paint(cx - 0.03, base - 0.06, cx + 0.045, base + 0.005, (x, y) => {
+    setc(CAT);
+    const px = x - cx;
+    const py = y - base;
+    // seated body, head tipped up toward the climber, two ears, tail curled round
+    if (Math.hypot(px / 0.0125, (py + 0.016) / 0.0175) < 1) return 1;
+    if (Math.hypot(px + 0.002, py + 0.038) < 0.0098) return 1;
+    for (const ex of [-0.0085, 0.0045]) {
+      const ux = px - ex;
+      const uy = py + 0.045;
+      if (uy < 0 && uy > -0.011 && Math.abs(ux) < 0.0052 * (1 + uy / 0.011)) return 1;
+    }
+    if (sdCapsule(x, y, cx + 0.008, base - 0.004, cx + 0.026, base - 0.005, 0.0032) < 0) return 1;
+    if (sdCapsule(x, y, cx + 0.026, base - 0.005, cx + 0.031, base - 0.017, 0.0029) < 0) return 1;
+    return 0;
+  });
 }
 
 // ---------------------------------------------------------------- 6. slider and pull tab
@@ -512,17 +561,20 @@ paint(Math.min(LBX, LTX) - 0.04, LTY - 0.02, Math.max(LBX, LTX) + 0.04, LBY + 0.
 const P = (u: number, v: number): [number, number] => [LBX + LUX * u + LNX * v, LBY + LUY * u + LNY * v];
 {
   const U0 = LLEN * 0.5; // how far up the ladder the lower foot stands
-  const footL = P(U0, -0.006);
-  const footR = P(U0 + 0.04, 0.008);
-  const kneeR = P(U0 + 0.07, 0.04);
-  const hip = P(U0 + 0.082, 0.014);
+  // side view, facing the zipper: back leg nearly straight on a lower rung, front leg
+  // bent with its knee toward the ladder and its foot one rung higher
+  const footL = P(U0, 0.004);
+  const kneeL = P(U0 + 0.043, 0.024);
+  const footR = P(U0 + 0.03, -0.014);
+  const kneeR = P(U0 + 0.07, -0.02);
+  const hip = P(U0 + 0.084, 0.016);
   const neck = P(U0 + 0.142, 0.007);
   const head = P(U0 + 0.168, 0.005);
   const handUp: [number, number] = [TAB_BX + 0.004, TAB_BY - 0.004];
   const elbowUp: [number, number] = [mix(neck[0], handUp[0], 0.5) + 0.004, mix(neck[1], handUp[1], 0.5) + 0.016];
   const handRail = P(U0 + 0.125, -RAIL);
   const x0 = Math.min(handUp[0], footL[0]) - 0.07;
-  const x1 = Math.max(kneeR[0], hip[0]) + 0.1;
+  const x1 = Math.max(kneeL[0], hip[0]) + 0.13;
   const y0 = Math.min(head[1], handUp[1]) - 0.04;
   const y1 = footL[1] + 0.02;
   const HAIR = hex(0x2a1638);
@@ -543,16 +595,20 @@ const P = (u: number, v: number): [number, number] => [LBX + LUX * u + LNX * v, 
       }
     }
     // far leg, then near leg
-    if (sdCapsule(x, y, hip[0], hip[1], footL[0], footL[1], 0.0088) < 0) {
+    if (sdCapsule(x, y, hip[0], hip[1], kneeL[0], kneeL[1], 0.0086) < 0 || sdCapsule(x, y, kneeL[0], kneeL[1], footL[0], footL[1], 0.0078) < 0) {
       setc(TROUSERS_LO);
       hit = 1;
     }
-    if (sdCapsule(x, y, hip[0], hip[1], kneeR[0], kneeR[1], 0.0094) < 0 || sdCapsule(x, y, kneeR[0], kneeR[1], footR[0], footR[1], 0.0086) < 0) {
+    // boots sit along the rungs, toes toward the zipper
+    if (sdCapsule(x, y, footL[0] - LNX * 0.013, footL[1] - LNY * 0.013, footL[0] + LNX * 0.004, footL[1] + LNY * 0.004, 0.0068) < 0) {
+      setc(BOOT);
+      hit = 1;
+    }
+    if (sdCapsule(x, y, hip[0], hip[1], kneeR[0], kneeR[1], 0.009) < 0 || sdCapsule(x, y, kneeR[0], kneeR[1], footR[0], footR[1], 0.008) < 0) {
       setc(TROUSERS);
       hit = 1;
     }
-    // boots
-    if (sdCapsule(x, y, footL[0] - 0.011, footL[1], footL[0] + 0.005, footL[1], 0.008) < 0 || sdCapsule(x, y, footR[0] - 0.011, footR[1], footR[0] + 0.005, footR[1], 0.008) < 0) {
+    if (sdCapsule(x, y, footR[0] - LNX * 0.013, footR[1] - LNY * 0.013, footR[0] + LNX * 0.004, footR[1] + LNY * 0.004, 0.0068) < 0) {
       setc(BOOT);
       hit = 1;
     }
